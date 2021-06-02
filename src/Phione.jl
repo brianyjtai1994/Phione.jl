@@ -1,5 +1,5 @@
 module Phione
 
-greet() = print("Hello World!")
+include("words.jl")
 
 end # module
