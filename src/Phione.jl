@@ -6,16 +6,7 @@ include("words.jl")
 
 const EOFChar = Char(0xA1) # End Of File Char
 
-mutable struct Status
-    cnChar::Channel{Char}
-    twChar::Channel{Char}
-    ifdone::Channel{Bool}
-    result::String
-    Status() = new(Channel{Char}(16), Channel{Char}(16), Channel{Bool}(1), "")
-end
-
-function destruct!(st::Status, str::AbstractString)
-    chn = st.cnChar
+function destruct!(chn::Channel{Char}, str::AbstractString)
     tmp = iterate(str)
     tmp ≡ nothing && error("destruct!: string collection must be nonempty")
 
@@ -30,9 +21,7 @@ function destruct!(st::Status, str::AbstractString)
     return nothing
 end
 
-function char2phr!(st::Status)
-    cnChar = st.cnChar
-    twChar = st.twChar
+function char2phr!(cnChar::Channel{Char}, twChar::Channel{Char})
     while true
         temp = take!(cnChar)
         temp ≡ EOFChar && (put!(twChar, EOFChar), break)
@@ -42,33 +31,22 @@ function char2phr!(st::Status)
     return nothing
 end
 
-function assemble!(st::Status)
-    chn = st.twChar
-    ret = st.result
+function assemble!(chn::Channel{Char})
+    ret = ""
     while true
         temp = take!(chn)   
         temp ≡ EOFChar && (close(chn), break)
         ret *= temp
     end
-    st.result = ret
-    put!(st.ifdone, true)
-    return nothing
-end
-
-function terminate(st::Status)
-    ifdone = st.ifdone
-    while true
-        fetch(ifdone) && (close(ifdone), break)
-    end
-    return st.result
+    return ret
 end
 
 function s2tw(str::AbstractString)
-    st = Status()
-    @async destruct!(st, str)
-    @async char2phr!(st)
-    @async assemble!(st)
-    return fetch(@async terminate(st))
+    cnChar = Channel{Char}(16)
+    twChar = Channel{Char}(16)
+    @async destruct!(cnChar, str)
+    @async char2phr!(cnChar, twChar)
+    return fetch(@async assemble!(twChar))::String
 end
 
 end # module
