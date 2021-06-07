@@ -7,25 +7,53 @@ include("words.jl")
 const EOFChar = Char(0xA1) # End Of File Char
 
 function destruct!(chn::Channel{Char}, str::AbstractString)
-    tmp = iterate(str)
-    tmp ≡ nothing && error("destruct!: string collection must be nonempty")
+    temp = iterate(str)
+    temp ≡ nothing && error("destruct!: string collection must be nonempty")
 
-    chr, idx = tmp
-    put!(chn, chr)
+    char, idx = temp
+    put!(chn, char)
     while true
-        tmp = iterate(str, idx)
-        tmp ≡ nothing && (put!(chn, EOFChar), break)
-        chr, idx = tmp
-        put!(chn, chr)
+        temp = iterate(str, idx)
+        temp ≡ nothing && (put!(chn, EOFChar), break)
+        char, idx = temp
+        put!(chn, char)
     end
     return nothing
 end
 
+char2phr!(chn::Channel{Char}, char::Char) = haskey(WORDS, char) ? put!(chn, WORDS[char]) : put!(chn, char)
+
 function char2phr!(cnChar::Channel{Char}, twChar::Channel{Char})
     while true
-        temp = take!(cnChar)
-        temp ≡ EOFChar && (put!(twChar, EOFChar), break)
-        haskey(WORDS, temp) ? put!(twChar, WORDS[temp]) : put!(twChar, temp)
+        letter = take!(cnChar)
+        letter ≡ EOFChar && (put!(twChar, EOFChar), break)
+        isdone = false
+        if haskey(PHRASELENGTH, letter)
+            maxlen = PHRASELENGTH[letter]
+            phrase = string(letter)
+            counts = 1
+            while counts < maxlen && fetch(cnChar) ≠ EOFChar
+                phrase *= take!(cnChar)
+                counts += 1
+                if haskey(PHRASES, phrase)
+                    phrase = PHRASES[phrase]
+                    isdone = true
+                    break
+                end
+            end
+            fun! = isdone ? put! : char2phr!
+            temp = iterate(phrase)
+            char, idx = temp
+            fun!(twChar, char)
+            while true
+                temp = iterate(phrase, idx)
+                temp ≡ nothing && break
+                char, idx = temp
+                fun!(twChar, char)
+            end
+        else
+            char2phr!(twChar, letter)
+        end
     end
     close(cnChar)
     return nothing
